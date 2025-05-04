@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <link rel="stylesheet" href="login.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+    <div class="background-decorations">
+        <!-- Basic shapes as stand-ins for complex doodles -->
+        <div class="dot dot1"></div>
+        <div class="dot dot2"></div>
+        <div class="dot dot3"></div>
+        <div class="dot dot4"></div>
+        <div class="dot dot5"></div>
+        <div class="dot dot6"></div>
+        <div class="dot dot7"></div>
+        <div class="dot dot8"></div>
+        <div class="star star1">☆</div>
+        <div class="star star2">★</div>
+        <div class="star star3">✶</div>
+        <div class="swirl swirl1">🌀</div>
+        <div class="swirl swirl2"> squiggle </div>
+        <div class="lines lines1">///</div>
+        <div class="lines lines2">///</div>
+        <div class="circle circle1">○</div>
+    </div>
+
+    <div class="container">
+        <h1 class="title">LOGIN</h1>
+        <div class="login-box">
+            <form action="#">
+                <p class="form-label">Username</p>
+                <div class="input-group">
+                    <i class="fas fa-user icon"></i>
+                    <input type="text" placeholder="Username" required>
+                </div>
+                <div class="input-group">
+                    <i class="fas fa-lock icon"></i>
+                    <input type="password" placeholder="Password" required>
+                </div>
+                <button type="submit" class="btn log-in-btn">LOG IN</button>
+            </form>
+            <a href="#" class="forgot-password">Forgot password?</a>
+            <p class="signup-prompt">Don't have an account?</p>
+            <button type="button" class="btn sign-up-btn" onclick="window.location.href='register.html'">SIGN UP</button>
+        </div>
+    </div>
+</body>
+</html>

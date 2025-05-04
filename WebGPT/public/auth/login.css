@@ -1,0 +1,295 @@
+/* Your CSS code here */
+:root {
+    --primary-purple: #a020f0; /* Vibrant purple */
+    --dark-purple: #5d0f8b;
+    --light-purple: #c88eff;
+    --background-dark: #1a1a2e; /* Dark space background */
+    --text-light: #ffffff;
+    --input-bg: rgba(255, 255, 255, 0.1);
+    --box-bg: rgba(75, 0, 130, 0.3); /* Semi-transparent purple */
+    --font-primary: 'Nunito', sans-serif;
+    --font-title: 'Fredoka One', cursive;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-primary);
+    background-color: var(--background-dark);
+    color: var(--text-light);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+    position: relative;
+}
+
+.background-decorations {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.background-decorations > div {
+    position: absolute;
+    color: var(--light-purple);
+    opacity: 0.7;
+    font-size: 1.5rem;
+}
+
+.dot { background-color: var(--light-purple); width: 6px; height: 6px; border-radius: 50%; }
+.dot1 { top: 10%; left: 15%; }
+.dot2 { top: 5%; left: 40%; }
+.dot3 { top: 12%; right: 10%; }
+.dot4 { bottom: 10%; left: 10%; }
+.dot5 { bottom: 5%; right: 45%; }
+.dot6 { bottom: 20%; right: 15%; }
+.dot7 { top: 70%; left: 8%; }
+.dot8 { top: 85%; right: 8%; }
+
+.star1 { top: 25%; left: 10%; font-size: 2rem; transform: rotate(-15deg); }
+.star2 { bottom: 15%; right: 10%; font-size: 2rem; }
+.star3 { top: 45%; right: 12%; font-size: 2.5rem; }
+
+.swirl1 { top: 35%; right: 8%; font-size: 2rem; transform: rotate(20deg); }
+.swirl2 {
+    top: 50%;
+    left: 10%;
+    font-size: 1.5rem;
+    transform: rotate(-30deg);
+    font-family: cursive;
+    content: "~";
+    display: inline-block;
+    border-bottom: 2px solid var(--light-purple);
+    width: 20px;
+    height: 10px;
+    border-radius: 50% / 10px 10px 0 0;
+    text-indent: -9999px;
+}
+
+.lines { font-size: 1.5rem; font-weight: bold; }
+.lines1 { top: 30%; right: 15%; transform: rotate(30deg); }
+.lines2 { bottom: 25%; left: 12%; transform: rotate(-45deg); }
+
+.circle1 { top: 20%; left: 20%; font-size: 1.5rem; }
+
+.container {
+    text-align: center;
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.title {
+    font-family: var(--font-title);
+    font-size: 5rem;
+    margin-bottom: 1.5rem;
+    color: var(--light-purple);
+    text-shadow:
+        -3px -3px 0 var(--dark-purple),
+        3px -3px 0 var(--dark-purple),
+        -3px 3px 0 var(--dark-purple),
+        3px 3px 0 var(--dark-purple),
+        0 0 15px var(--primary-purple),
+        0 0 25px var(--primary-purple);
+    letter-spacing: 0.1em;
+    line-height: 1;
+}
+
+.login-box {
+    background: var(--box-bg);
+    padding: 3rem 2.5rem;
+    border-radius: 30px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    width: 100%;
+    max-width: 400px;
+    position: relative;
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+.login-box::before,
+.login-box::after {
+    content: '';
+    position: absolute;
+    background-color: rgba(255, 255, 255, 0.08);
+    border-radius: 50%;
+    z-index: -1;
+}
+
+.login-box::before {
+    width: 50px;
+    height: 50px;
+    top: 15px;
+    left: 20px;
+    opacity: 0.5;
+}
+
+.login-box::after {
+    width: 30px;
+    height: 30px;
+    bottom: 70px;
+    left: 30px;
+    opacity: 0.4;
+}
+
+.form-label {
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    text-align: left;
+    padding-left: 10px;
+    font-weight: 600;
+}
+
+.input-group {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+.input-group .icon {
+    position: absolute;
+    left: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--light-purple);
+    opacity: 0.8;
+}
+
+.input-group input {
+    width: 100%;
+    padding: 1rem 1rem 1rem 2.8rem;
+    background-color: var(--input-bg);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 15px;
+    color: var(--text-light);
+    font-size: 1rem;
+    font-family: var(--font-primary);
+}
+
+.input-group input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.input-group input:focus {
+    outline: none;
+    border-color: var(--light-purple);
+    box-shadow: 0 0 10px rgba(160, 32, 240, 0.5);
+}
+
+.btn {
+    width: 100%;
+    padding: 1rem;
+    border: none;
+    border-radius: 15px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: var(--font-primary);
+    letter-spacing: 0.05em;
+}
+
+.log-in-btn {
+    background: linear-gradient(90deg, var(--primary-purple), var(--light-purple));
+    color: var(--text-light);
+    margin-bottom: 1rem;
+    box-shadow: 0 4px 15px rgba(160, 32, 240, 0.4);
+}
+
+.log-in-btn:hover {
+    background: linear-gradient(90deg, var(--light-purple), var(--primary-purple));
+    box-shadow: 0 6px 20px rgba(160, 32, 240, 0.6);
+}
+
+.forgot-password {
+    display: block;
+    color: var(--light-purple);
+    text-decoration: none;
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+    transition: color 0.3s ease;
+}
+
+.forgot-password:hover {
+    color: var(--text-light);
+}
+
+.signup-prompt {
+    font-size: 0.9rem;
+    margin-bottom: 0.8rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.sign-up-btn {
+    background-color: transparent;
+    color: var(--light-purple);
+    border: 2px solid var(--light-purple);
+}
+
+.sign-up-btn:hover {
+    background-color: var(--light-purple);
+    color: var(--background-dark);
+}
+
+@media (max-width: 768px) {
+    .title {
+        font-size: 4rem;
+    }
+    .login-box {
+        padding: 2rem 1.5rem;
+        max-width: 350px;
+    }
+    .background-decorations > div {
+        font-size: 1.2rem;
+        opacity: 0.5;
+    }
+    .star1, .star2, .star3 { font-size: 1.5rem;}
+    .swirl1 { font-size: 1.5rem; }
+}
+
+@media (max-width: 480px) {
+    body {
+        align-items: flex-start;
+        padding-top: 5vh;
+    }
+    .title {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+    .login-box {
+        padding: 1.5rem 1rem;
+        max-width: 90%;
+        border-radius: 20px;
+    }
+    .input-group input {
+        padding: 0.8rem 0.8rem 0.8rem 2.5rem;
+        font-size: 0.9rem;
+    }
+    .btn {
+        padding: 0.8rem;
+        font-size: 1rem;
+        border-radius: 12px;
+    }
+    .form-label {
+        font-size: 1rem;
+        margin-bottom: 0.8rem;
+    }
+    .forgot-password, .signup-prompt {
+        font-size: 0.8rem;
+    }
+    .background-decorations {
+        display: none;
+    }
+}

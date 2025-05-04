@@ -1,0 +1,14 @@
+
+> my-v0-project@0.1.0 dev
+> next dev -p 9000
+
+   ▲ Next.js 15.2.4
+   - Local:        http://localhost:9000
+   - Network:      http://192.168.1.2:9000
+   - Environments: .env.local
+   - Experiments (use with caution):
+     ✓ webpackBuildWorker
+     ✓ parallelServerCompiles
+     ✓ parallelServerBuildTraces
+
+ ✓ Starting...
