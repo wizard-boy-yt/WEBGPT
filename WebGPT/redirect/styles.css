@@ -1,0 +1,178 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Arial', sans-serif;
+    background-color: #0a0a0a; /* Very dark background */
+}
+
+/* Create a gradient background as fallback */
+body {
+    background: radial-gradient(circle at center, #1a0a20 0%, #0a0a0a 70%);
+}
+
+#root {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+.canvas-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+}
+
+.canvas-container canvas {
+    display: block;
+}
+
+.content {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    text-align: center;
+    pointer-events: none; /* Allow clicks to pass through to canvas except for button */
+}
+
+/* Fallback content has all elements clickable */
+.fallback-content {
+    pointer-events: auto;
+}
+
+h1 {
+    font-size: 3rem;
+    margin-bottom: 2rem;
+    background: linear-gradient(135deg, #9c27b0, #ff9800);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 0 10px rgba(156, 39, 176, 0.3);
+}
+
+.redirect-button {
+    padding: 1rem 2rem;
+    font-size: 1.2rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    background: linear-gradient(135deg, #9c27b0, #ff9800);
+    color: white;
+    box-shadow: 0 4px 15px rgba(156, 39, 176, 0.5);
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    pointer-events: auto; /* Make button clickable */
+}
+
+.redirect-button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(156, 39, 176, 0.7);
+}
+
+.redirect-button:active {
+    transform: translateY(1px);
+}
+
+.redirect-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: all 0.5s ease;
+}
+
+.redirect-button:hover::before {
+    left: 100%;
+}
+
+.loading-text {
+    margin-top: 1rem;
+    font-size: 1rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.loading-text.visible {
+    opacity: 1;
+}
+
+/* Fallback mode styles */
+.fallback-mode {
+    background: linear-gradient(135deg, #1a0a20, #0a0a0a);
+}
+
+.fallback-mode::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, rgba(156, 39, 176, 0.2) 0%, transparent 70%);
+    z-index: 0;
+}
+
+/* Add animated background for fallback */
+@keyframes gradientAnimation {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+.fallback-mode .fallback-content::after {
+    content: '';
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(135deg, 
+        rgba(156, 39, 176, 0.1) 0%, 
+        rgba(255, 152, 0, 0.1) 25%, 
+        rgba(156, 39, 176, 0.1) 50%, 
+        rgba(255, 152, 0, 0.1) 75%, 
+        rgba(156, 39, 176, 0.1) 100%);
+    background-size: 400% 400%;
+    animation: gradientAnimation 15s ease infinite;
+    z-index: -1;
+}
+
+/* Add some responsive styling */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2rem;
+    }
+    
+    .redirect-button {
+        padding: 0.8rem 1.6rem;
+        font-size: 1rem;
+    }
+}
