@@ -43,7 +43,7 @@ export default function ZenSiteMainPage() {
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showHistory]);
+  }, [showHistory, historySidebarRef]);
 
 
   const handleDownload = async () => {
@@ -271,6 +271,8 @@ export default function ZenSiteMainPage() {
   const htmlEditorContainerRef = useRef<HTMLDivElement>(null);
   const cssEditorContainerRef = useRef<HTMLDivElement>(null);
   const jsEditorContainerRef = useRef<HTMLDivElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const leftSideContainerRef = useRef<HTMLDivElement>(null);
 
   const smoothScrollToBottom = (containerRef: React.RefObject<HTMLDivElement>) => {
     if (containerRef.current) {
@@ -1039,9 +1041,47 @@ export default function ZenSiteMainPage() {
         </div>
 
         {/* Right Panel (Preview) */}
-        <div className="flex flex-col bg-white overflow-hidden relative h-[50vh] md:h-auto">
-          <div className="flex-1 relative">
-            <Preview html={htmlContent} css={cssContent} js={jsContent} />
+        <div className="flex flex-col bg-white overflow-hidden relative h-[50vh] md:h-auto" style={{ minWidth: '300px' }}>
+          <div
+            className="flex-1 relative"
+            style={{ width: '100%', minWidth: '300px' }}
+            ref={previewContainerRef}
+          >
+            <Preview
+              html={htmlContent
+                .replace('href="styles.css"', '')
+                .replace('src="script.js"', '')}
+              css={cssContent}
+              js={jsContent}
+            />
+            <div
+              className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize bg-gray-300 hover:bg-purple-500 transition-colors"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const startX = e.clientX;
+                const container = previewContainerRef.current;
+                const leftContainer = leftSideContainerRef.current;
+                if (!container || !leftContainer) return;
+                
+                const startWidth = container.clientWidth;
+                const startLeftWidth = leftContainer.clientWidth;
+                
+                const handleMouseMove = (moveEvent: MouseEvent) => {
+                  const newWidth = Math.max(300, Math.min(window.innerWidth - 100, startWidth + (startX - moveEvent.clientX)));
+                  const newLeftWidth = window.innerWidth - newWidth;
+                  container.style.width = `${newWidth}px`;
+                  leftContainer.style.width = `${newLeftWidth}px`;
+                };
+
+                const handleMouseUp = () => {
+                  document.removeEventListener('mousemove', handleMouseMove);
+                  document.removeEventListener('mouseup', handleMouseUp);
+                };
+
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+              }}
+            />
           </div>
           <div className="absolute top-2 right-2">
             <Button 
