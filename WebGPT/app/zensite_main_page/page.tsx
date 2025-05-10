@@ -30,6 +30,7 @@ export default function ZenSiteMainPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isLogoLoading, setIsLogoLoading] = useState(false);
   const historySidebarRef = useRef<HTMLDivElement>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -394,28 +395,31 @@ export default function ZenSiteMainPage() {
               if (delta) {
                 accumulatedResponse += delta;
 
+                // Process code blocks with improved regex patterns
                 const htmlMatch = accumulatedResponse.match(/```html\n([\s\S]*?)(\n```|$)/);
                 const cssMatch = accumulatedResponse.match(/```css\n([\s\S]*?)(\n```|$)/);
                 const jsMatch = accumulatedResponse.match(/```javascript\n([\s\S]*?)(\n```|$)/);
 
+                // Process each code block type separately
                 if (htmlMatch) {
-                  const newHtml = htmlMatch[1].trim();
-                  if (newHtml) setHtmlContent(newHtml);
-                  setActiveTab('html');
+                  processCodeBlock(htmlMatch, 'html');
                 }
                 if (cssMatch) {
-                  const newCss = cssMatch[1].trim();
-                  if (newCss) setCssContent(newCss);
-                  setActiveTab('css');
+                  processCodeBlock(cssMatch, 'css');
                 }
                 if (jsMatch) {
-                  const newJs = jsMatch[1].trim();
-                  if (newJs) setJsContent(newJs);
-                  setActiveTab('js');
+                  processCodeBlock(jsMatch, 'js');
                 }
               }
             } catch (e) {
               console.error('Failed to parse SSE JSON:', jsonData, e);
+              
+              // Check if this is a rate limiting error
+              if (jsonData.includes('rate-limit') || jsonData.includes('capacity') || 
+                  jsonData.includes('Provider returned error') || jsonData.includes('google/gemini')) {
+                setError('The AI models are currently experiencing high demand. Please try again in a few minutes or try with a text prompt instead.');
+                console.error('Error in SSE response:', jsonData);
+              }
             }
           }
         }
@@ -432,6 +436,7 @@ export default function ZenSiteMainPage() {
   const handlePromptSubmit = async () => {
     // Clear any previous errors
     setError(null);
+    setIsGenerating(true); // Start generation
     
     // Check if we have existing code to modify
     const hasExistingCode = htmlContent !== '<!-- HTML code will appear here -->' || 
@@ -458,11 +463,16 @@ export default function ZenSiteMainPage() {
     
     try {
       // Prepare data for the API request
-      let requestBody;
+      let base64Data = '';
       if (isImageInput && imagePreview) {
         // For image input, ensure proper formatting
         // Keep the full data URL for MIME type detection in the API
-        const base64Data = imagePreview.startsWith('data:') ? 
+        // Check if the image data is too large
+        if (imagePreview.length > 10 * 1024 * 1024) { // 10MB limit
+          throw new Error('Image is too large. Maximum size is 10MB.');
+        }
+        
+        base64Data = imagePreview.startsWith('data:') ? 
           imagePreview : 
           `data:image/png;base64,${imagePreview}`;
         
@@ -472,68 +482,87 @@ export default function ZenSiteMainPage() {
           startsWithDataUrl: imagePreview ? imagePreview.startsWith('data:') : false,
           imagePromptLength: imagePrompt ? imagePrompt.length : 0
         });
-        
-        requestBody = {
-          imageData: base64Data,
-          prompt: imagePrompt
-        };
-      } else {
-        // For text input - simplify to match the text-generate API expectations
-        requestBody = {
-          prompt: prompt
-        };
       }
 
+      // Use different endpoints based on input type
+      // For image input, use image-to-webgenerator API; for text input, use text-generate API
+      const endpoint = isImageInput ? '/api/image-to-webgenerator' : '/api/text-generate';
+      console.log(`Using endpoint: ${endpoint} for ${isImageInput ? 'image' : 'text'} input`);
+      
+      // Prepare request data based on input type
+      const requestData = isImageInput 
+        ? {
+            imageData: base64Data,
+            prompt: imagePrompt || 'Generate a complete responsive website from this image'
+          }
+        : {
+            prompt: prompt || 'Generate a complete responsive website'
+          };
+          
       // Validate request data
       if (isImageInput) {
         // For image input, we need imageData
-        if (!requestBody.imageData) {
+        if (!requestData.imageData) {
           throw new Error('No image data available.');
         }
         // prompt is optional for image input
       } else {
         // For text input, we need prompt
-        if (!requestBody.prompt) {
+        if (!requestData.prompt) {
           throw new Error('Please enter a website description.');
         }
       }
-
-      // Use different endpoints based on input type
-      const endpoint = isImageInput ? '/api/gemini' : '/api/text-generate';
-      console.log(`Using endpoint: ${endpoint} for ${isImageInput ? 'image' : 'text'} input`);
+      
+      console.log('Sending request to API with data:', {
+        endpoint,
+        isImageInput,
+        hasImageData: isImageInput && !!base64Data,
+        imageDataLength: isImageInput && base64Data ? base64Data.length : 0,
+        imageDataPrefix: isImageInput && base64Data ? base64Data.substring(0, 30) + '...' : '',
+        promptLength: (isImageInput ? imagePrompt : prompt)?.length || 0
+      });
       
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(requestData),
       });
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries([...response.headers.entries()]));
 
       if (!response.ok) {
         let errorMsg = `API request failed with status ${response.status}`;
         try {
           const errorData = await response.json();
-          errorMsg = errorData.error || errorMsg;
-          console.error('Gemini API error response:', errorData);
+          errorMsg = errorData.error?.message || errorData.error || errorMsg;
+          console.error(`${isImageInput ? 'Image-to-webgenerator' : 'Text-generate'} API error response:`, errorData);
+          
+          // Special handling for rate limiting errors
+          if (errorMsg.includes('rate-limit') || errorMsg.includes('capacity') || errorMsg.includes('high demand')) {
+            errorMsg = 'The AI models are currently experiencing high demand. Please try again in a few minutes or try with a text prompt instead.';
+          }
         } catch (jsonError) {
           try {
-             const errorText = await response.text();
-             console.error("Non-JSON error response from Gemini API:", errorText);
-             errorMsg = errorText ? `API Error: ${errorText.substring(0, 100)}` : errorMsg; 
+            const errorText = await response.text();
+            errorMsg = errorText || errorMsg;
+            console.error('Failed to parse error response as JSON, raw text:', errorText);
           } catch (textError) {
-             console.error("Failed to read error response body from Gemini API:", textError);
+            console.error('Failed to read error response:', textError);
           }
         }
         throw new Error(errorMsg);
       }
       
-      console.log(`${isImageInput ? 'Gemini' : 'Text-generate'} API request successful`);
+      console.log(`API request to ${endpoint} successful`);
 
-      if (isImageInput) {
-        // For the Gemini API route, we get a direct JSON response with html, css, and js
+      // Process response based on whether it's a direct JSON response or a stream
+      if (response.headers.get('content-type')?.includes('application/json')) {
+        // For direct JSON responses (typically from Gemini API)
         const responseData = await response.json();
-        console.log('Received response data:', {
+        console.log('Received direct JSON response data:', {
           hasHtml: !!responseData.html,
           hasCss: !!responseData.css,
           hasJs: !!responseData.js,
@@ -542,6 +571,7 @@ export default function ZenSiteMainPage() {
           jsLength: responseData.js?.length || 0
         });
         
+        // Update content states with the received data
         if (responseData.html) {
           setHtmlContent(responseData.html);
           setActiveTab('html');
@@ -557,11 +587,23 @@ export default function ZenSiteMainPage() {
         
         // If we didn't get any content, show an error
         if (!responseData.html && !responseData.css && !responseData.js) {
-          throw new Error('No content was generated. Please try again with a different image or prompt.');
+          // Check if there's an error message in the response
+          if (responseData.error || responseData.details) {
+            throw new Error(responseData.error || responseData.details || 'No content was generated.');
+          } else {
+            // Check if we had a rate limiting error earlier
+            if (error && (error.includes('rate-limit') || error.includes('high demand') || error.includes('capacity'))) {
+              throw new Error('The AI models are currently experiencing high demand. Please try again in a few minutes or try with a text prompt instead.');
+            } else {
+              throw new Error('No content was generated. Please try again with a different image or prompt. If the problem persists, try using text input mode instead.');
+            }
+          }
         }
-      } else {
-        // For text-generate API, we get a streaming response
+      } else if (response.headers.get('content-type')?.includes('text/event-stream')) {
+        console.log('Processing streaming response');
+        // For text-generate API or Gemini API, we get a streaming response
         if (!response.body) {
+          console.error('Response body is null');
           throw new Error('Response body is null');
         }
 
@@ -570,15 +612,19 @@ export default function ZenSiteMainPage() {
         const decoder = new TextDecoder();
         let accumulatedResponse = ''; 
         let leftover = ''; 
+        let chunkCount = 0;
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
-            console.log('Stream finished.');
+            console.log('Stream finished after', chunkCount, 'chunks');
             break;
           }
 
+          chunkCount++;
           const chunkText = leftover + decoder.decode(value, { stream: true });
+          console.log(`Received chunk #${chunkCount}, length: ${chunkText.length}`);
+          
           const lines = chunkText.split('\n');
           
           if (!chunkText.endsWith('\n')) {
@@ -595,62 +641,109 @@ export default function ZenSiteMainPage() {
               } else {
                 try {
                   const parsed = JSON.parse(jsonData);
+                  console.log('Parsed SSE JSON:', {
+                    hasChoices: !!parsed.choices,
+                    choicesLength: parsed.choices?.length,
+                    hasDelta: !!parsed.choices?.[0]?.delta,
+                    deltaContent: parsed.choices?.[0]?.delta?.content ? 
+                      parsed.choices[0].delta.content.substring(0, 20) + '...' : 'none'
+                  });
+                  
+                  // Check for error in the response
+                  if (parsed.error) {
+                    console.error('Error in SSE response:', parsed.error);
+                    throw new Error(parsed.error.message || 'Error in API response');
+                  }
+                  
                   const delta = parsed.choices?.[0]?.delta?.content;
                   if (delta) {
                     accumulatedResponse += delta; 
+                    console.log('Accumulated response length:', accumulatedResponse.length);
 
-                    // Re-parse the accumulated response to update code blocks
-                    // Use non-greedy matching and check for end-of-string $
+                    // Process code blocks with improved regex patterns
                     const htmlMatch = accumulatedResponse.match(/```html\n([\s\S]*?)(\n```|$)/);
                     const cssMatch = accumulatedResponse.match(/```css\n([\s\S]*?)(\n```|$)/);
                     const jsMatch = accumulatedResponse.match(/```javascript\n([\s\S]*?)(\n```|$)/);
 
+                    // Process each code block type separately
                     if (htmlMatch) {
-                      setHtmlContent(htmlMatch[1]);
-                      setActiveTab('html');
+                      processCodeBlock(htmlMatch, 'html');
                     }
                     if (cssMatch) {
-                      setCssContent(cssMatch[1]);
-                      setActiveTab('css');
+                      processCodeBlock(cssMatch, 'css');
                     }
                     if (jsMatch) {
-                      setJsContent(jsMatch[1]);
-                      setActiveTab('js');
+                      processCodeBlock(jsMatch, 'js');
                     }
                   }
                 } catch (e) {
                   console.error('Failed to parse SSE JSON:', jsonData, e);
+                  
+                  // Check if this is a rate limiting error
+                  if (jsonData.includes('rate-limit') || jsonData.includes('capacity') || 
+                      jsonData.includes('Provider returned error') || jsonData.includes('google/gemini')) {
+                    setError('The AI models are currently experiencing high demand. Please try again in a few minutes or try with a text prompt instead.');
+                    console.error('Error in SSE response:', jsonData);
+                  }
                 }
               }
             }
           }
         }
         
-        // Final parse after stream ends to ensure complete blocks are captured
+        // Add a function to validate and format code blocks
+        const validateAndFormatCode = (content: string, type: 'html' | 'css' | 'js'): string => {
+          switch (type) {
+            case 'html':
+              return content.includes('<!DOCTYPE') || content.includes('<html') 
+                ? content 
+                : `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<title>Generated Website</title>\n</head>\n<body>\n${content}\n</body>\n</html>`;
+            case 'css':
+              return content.startsWith('/*') ? content : `/* Generated CSS */\n${content}`;
+            case 'js':
+              return content.startsWith('//') ? content : `// Generated JavaScript\n${content}`;
+            default:
+              return content;
+          }
+        };
+
+        // Modify the final parse after stream ends
         const finalHtmlMatch = accumulatedResponse.match(/```html\n([\s\S]*?)```/);
         const finalCssMatch = accumulatedResponse.match(/```css\n([\s\S]*?)```/);
         const finalJsMatch = accumulatedResponse.match(/```javascript\n([\s\S]*?)```/);
         
-        const finalHtml = finalHtmlMatch?.[1].trim() || '';
-        const finalCss = finalCssMatch?.[1].trim() || '';
-        const finalJs = finalJsMatch?.[1].trim() || '';
-        
-        console.log('Final content lengths:', {
-          html: finalHtml.length,
-          css: finalCss.length,
-          js: finalJs.length
-        });
-        
-        setHtmlContent(finalHtml);
-        setCssContent(finalCss);
-        setJsContent(finalJs);
+        if (finalHtmlMatch) {
+          const formattedHtml = validateAndFormatCode(finalHtmlMatch[1].trim(), 'html');
+          setHtmlContent(formattedHtml);
+        }
+        if (finalCssMatch) {
+          const formattedCss = validateAndFormatCode(finalCssMatch[1].trim(), 'css');
+          setCssContent(formattedCss);
+        }
+        if (finalJsMatch) {
+          const formattedJs = validateAndFormatCode(finalJsMatch[1].trim(), 'js');
+          setJsContent(formattedJs);
+        }
       }
 
     } catch (err) {
-      console.error(`Error calling ${isImageInput ? 'Gemini' : 'Text-generate'} API:`, err);
-      setError(err instanceof Error ? err.message : 'An unknown error occurred during website generation.');
+      console.error(`Error calling ${isImageInput ? 'Image-to-webgenerator' : 'Text-generate'} API:`, err);
+      
+      // Format the error message for better user experience
+      let errorMessage = err instanceof Error ? err.message : 'An unknown error occurred during website generation.';
+      
+      // Special handling for rate limiting errors
+      if (errorMessage.includes('rate-limit') || 
+          errorMessage.includes('capacity') || 
+          errorMessage.includes('high demand') ||
+          errorMessage.includes('Provider returned error')) {
+        errorMessage = 'The AI models are currently experiencing high demand. Please try again in a few minutes or try with a text prompt instead.';
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
+      setIsGenerating(false); // End generation
       
       // Save to history after generation completes
       if (user?.id) {
@@ -710,6 +803,56 @@ export default function ZenSiteMainPage() {
     scrollToBottom('css-editor');
     scrollToBottom('js-editor');
   }, [htmlContent, cssContent, jsContent]);
+
+  // Add refs for the editor containers
+  const htmlEditorRef = useRef<HTMLDivElement>(null);
+  const cssEditorRef = useRef<HTMLDivElement>(null);
+  const jsEditorRef = useRef<HTMLDivElement>(null);
+
+  // Function to force scroll to bottom
+  const forceScrollToBottom = (element: HTMLElement | null) => {
+    if (element) {
+      element.scrollTop = element.scrollHeight;
+    }
+  };
+
+  // Modify the useEffect for scrolling
+  useEffect(() => {
+    if (isGenerating) {
+      // Force scroll to bottom for all editors
+      forceScrollToBottom(htmlEditorRef.current);
+      forceScrollToBottom(cssEditorRef.current);
+      forceScrollToBottom(jsEditorRef.current);
+    }
+  }, [htmlContent, cssContent, jsContent, isGenerating]);
+
+  // Modify the code block processing section
+  const processCodeBlock = (match: RegExpMatchArray | null, type: 'html' | 'css' | 'js') => {
+    if (match) {
+      const content = match[1].trim();
+      if (type === 'html') {
+        // Ensure HTML content is properly formatted
+        const formattedHtml = content.startsWith('<!DOCTYPE') || content.startsWith('<html') 
+          ? content 
+          : `<!DOCTYPE html>\n<html>\n<head>\n<meta charset="UTF-8">\n<title>Generated Website</title>\n</head>\n<body>\n${content}\n</body>\n</html>`;
+        setHtmlContent(formattedHtml);
+        setActiveTab('html');
+        forceScrollToBottom(htmlEditorRef.current);
+      } else if (type === 'css') {
+        // Ensure CSS content is properly formatted
+        const formattedCss = content.startsWith('/*') ? content : `/* Generated CSS */\n${content}`;
+        setCssContent(formattedCss);
+        setActiveTab('css');
+        forceScrollToBottom(cssEditorRef.current);
+      } else if (type === 'js') {
+        // Ensure JavaScript content is properly formatted
+        const formattedJs = content.startsWith('//') ? content : `// Generated JavaScript\n${content}`;
+        setJsContent(formattedJs);
+        setActiveTab('js');
+        forceScrollToBottom(jsEditorRef.current);
+      }
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-[#1a1a2e] text-gray-300 relative w-full">
@@ -898,11 +1041,24 @@ export default function ZenSiteMainPage() {
                     if (item.type.indexOf('image') !== -1) {
                       const blob = item.getAsFile();
                       if (blob) {
+                        // Check file size before processing
+                        if (blob.size > 10 * 1024 * 1024) { // 10MB limit
+                          setError('Pasted image is too large. Maximum size is 10MB.');
+                          return;
+                        }
+                        
                         const reader = new FileReader();
                         reader.onload = (event) => {
-                          setImagePreview(event.target?.result as string);
+                          const result = event.target?.result as string;
+                          setImagePreview(result);
                           setPrompt(''); // Clear text prompt when image is pasted
                           setImagePrompt(''); // Clear image text prompt too
+                          setError(null); // Clear any previous errors
+                          setIsImageInput(true); // Ensure image input mode is selected
+                          console.log('Image pasted successfully, size:', result.length);
+                        };
+                        reader.onerror = () => {
+                          setError('Failed to process the pasted image. Please try another image.');
                         };
                         reader.readAsDataURL(blob);
                       }
@@ -920,12 +1076,28 @@ export default function ZenSiteMainPage() {
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
+                      // Check file size before processing
+                      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                        setError('Image file is too large. Maximum size is 10MB.');
+                        return;
+                      }
+                      
+                      // Check file type
+                      if (!file.type.startsWith('image/')) {
+                        setError('Selected file is not an image.');
+                        return;
+                      }
+                      
                       const reader = new FileReader();
                       reader.onload = (event) => {
                         setImagePreview(event.target?.result as string);
                         setPrompt(''); // Clear text prompt when image is uploaded
                         setImagePrompt(''); // Clear image text prompt too
                         setError(null); // Clear any previous errors
+                        setIsImageInput(true); // Ensure image input mode is selected
+                      };
+                      reader.onerror = () => {
+                        setError('Failed to read the image file. Please try another image.');
                       };
                       reader.readAsDataURL(file);
                     }
@@ -1001,7 +1173,12 @@ export default function ZenSiteMainPage() {
                 <TabsTrigger value="js" className="text-gray-400 data-[state=active]:bg-[#2c2c44] data-[state=active]:text-white text-xs px-3 py-1 h-full rounded-t-md rounded-b-none">JavaScript</TabsTrigger>
               </TabsList>
               <TabsContent value="html" className="flex-1 overflow-auto m-0 p-0 relative">
-                <div className="absolute inset-0" ref={htmlEditorContainerRef} id="html-editor">
+                <div 
+                  className="absolute inset-0" 
+                  ref={htmlEditorRef} 
+                  id="html-editor"
+                  style={{ overflowY: 'auto' }}
+                >
                   <CodeMirrorEditor
                     key={`html-${editorKey}`}
                     value={htmlContent}
@@ -1011,7 +1188,12 @@ export default function ZenSiteMainPage() {
                 </div>
               </TabsContent>
               <TabsContent value="css" className="flex-1 overflow-auto m-0 p-0 relative">
-                <div className="absolute inset-0" ref={cssEditorContainerRef} id="css-editor">
+                <div 
+                  className="absolute inset-0" 
+                  ref={cssEditorRef} 
+                  id="css-editor"
+                  style={{ overflowY: 'auto' }}
+                >
                   <CodeMirrorEditor
                     key={`css-${editorKey}`}
                     value={cssContent}
@@ -1021,7 +1203,12 @@ export default function ZenSiteMainPage() {
                 </div>
               </TabsContent>
               <TabsContent value="js" className="flex-1 overflow-auto m-0 p-0 relative">
-                <div className="absolute inset-0" ref={jsEditorContainerRef} id="js-editor">
+                <div 
+                  className="absolute inset-0" 
+                  ref={jsEditorRef} 
+                  id="js-editor"
+                  style={{ overflowY: 'auto' }}
+                >
                   <CodeMirrorEditor
                     key={`js-${editorKey}`}
                     value={jsContent}
