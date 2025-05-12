@@ -10,9 +10,13 @@ import { redirect } from 'next/navigation'
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "WebGpt - Build websites with AI",
+  title: "WebGPT - AI-Powered Website Builder",
   description: "Create stunning, functional websites with AI in minutes. No coding required.",
-    generator: ''
+  generator: 'WebGPT',
+  icons: {
+    icon: '/logo/image.png',
+    apple: '/logo/image.png',
+  }
 }
 
 export default async function RootLayout({

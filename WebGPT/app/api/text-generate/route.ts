@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
         model: MODEL,
         messages: [{
           role: 'user',
-          content: `Generate a complete responsive, modern, dark-themed and glassmorphism effect website with propper routings (HTML, CSS, JavaScript) based on:
+          content: `Generate a complete responsive, reactive, modern, dark-themed and glassmorphism effect website (HTML, CSS, JavaScript) based on:
           ${prompt}
           Respond ONLY with the code in this format:
           \`\`\`html

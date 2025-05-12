@@ -862,7 +862,7 @@ export default function ZenSiteMainPage() {
       />
       <header className="flex items-center justify-between px-4 py-2 border-b border-gray-700/50">
         <div className="flex items-center space-x-4">
-          <div className="w-5 h-5 border-2 border-purple-500 rounded-full"></div>
+          <img src="/logo/image.png" alt="WebGPT Logo" className="w-5 h-5 rounded-full" />
           <div 
             onClick={() => setIsLogoLoading(true)}
             className="cursor-pointer"
