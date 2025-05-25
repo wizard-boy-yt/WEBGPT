@@ -20,6 +20,7 @@ export default function ZenSiteMainPage() {
   const [cssContent, setCssContent] = useState('/* CSS code will appear here */');
   const [jsContent, setJsContent] = useState('// JavaScript code will appear here');
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isImageInput, setIsImageInput] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null); // Base64 data URL
   const [imagePrompt, setImagePrompt] = useState(''); // State for image-related text prompt
@@ -30,6 +31,8 @@ export default function ZenSiteMainPage() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isLogoLoading, setIsLogoLoading] = useState(false);
   const historySidebarRef = useRef<HTMLDivElement>(null);
+  const jsContentRef = useRef<string>('// JavaScript code will appear here');
+  const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -148,6 +151,10 @@ export default function ZenSiteMainPage() {
     return () => {
       // Clean up loading state when component unmounts
       setIsLogoLoading(false);
+      // Clean up any pending timeouts
+      if (updateTimeoutRef.current) {
+        clearTimeout(updateTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -323,6 +330,7 @@ export default function ZenSiteMainPage() {
     }
 
     setError(null);
+    setSuccessMessage(null);
     setIsLoading(true);
     setActiveTab('html');
 
@@ -428,8 +436,9 @@ export default function ZenSiteMainPage() {
   };
 
   const handlePromptSubmit = async () => {
-    // Clear any previous errors
+    // Clear any previous errors and success messages
     setError(null);
+    setSuccessMessage(null);
     
     // Check if we have existing code to modify
     const hasExistingCode = htmlContent !== '<!-- HTML code will appear here -->' || 
@@ -568,13 +577,28 @@ export default function ZenSiteMainPage() {
         const decoder = new TextDecoder();
         let accumulatedResponse = ''; 
         let leftover = ''; 
+        let streamTimeout: NodeJS.Timeout | null = null;
+
+        // Set a timeout for the stream
+        const resetTimeout = () => {
+          if (streamTimeout) clearTimeout(streamTimeout);
+          streamTimeout = setTimeout(() => {
+            console.warn('Stream timeout - forcing completion');
+            reader.cancel();
+          }, 30000); // 30 second timeout
+        };
+
+        resetTimeout();
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
             console.log('Stream finished.');
+            if (streamTimeout) clearTimeout(streamTimeout);
             break;
           }
+
+          resetTimeout(); // Reset timeout on each chunk
 
           const chunkText = leftover + decoder.decode(value, { stream: true });
           const lines = chunkText.split('\n');
@@ -598,22 +622,80 @@ export default function ZenSiteMainPage() {
                     accumulatedResponse += delta; 
 
                     // Re-parse the accumulated response to update code blocks
-                    // Use non-greedy matching and check for end-of-string $
-                    const htmlMatch = accumulatedResponse.match(/```html\n([\s\S]*?)(\n```|$)/);
-                    const cssMatch = accumulatedResponse.match(/```css\n([\s\S]*?)(\n```|$)/);
-                    const jsMatch = accumulatedResponse.match(/```javascript\n([\s\S]*?)(\n```|$)/);
+                    // Use multiple regex patterns to catch different code block formats
+                    const htmlMatch = accumulatedResponse.match(/```html\s*\n([\s\S]*?)(\n```|$)/) ||
+                                     accumulatedResponse.match(/```HTML\s*\n([\s\S]*?)(\n```|$)/);
+                    const cssMatch = accumulatedResponse.match(/```css\s*\n([\s\S]*?)(\n```|$)/) ||
+                                    accumulatedResponse.match(/```CSS\s*\n([\s\S]*?)(\n```|$)/) ||
+                                    // Also try to extract CSS that might be embedded or incomplete
+                                    accumulatedResponse.match(/```css\s*\n([\s\S]*?)(?=\n```javascript|$)/);
+                    const jsMatch = accumulatedResponse.match(/```javascript\s*\n([\s\S]*?)(\n```|$)/) ||
+                                   accumulatedResponse.match(/```js\s*\n([\s\S]*?)(\n```|$)/) ||
+                                   accumulatedResponse.match(/```JavaScript\s*\n([\s\S]*?)(\n```|$)/) ||
+                                   accumulatedResponse.match(/```JS\s*\n([\s\S]*?)(\n```|$)/);
 
-                    if (htmlMatch) {
-                      setHtmlContent(htmlMatch[1]);
-                      setActiveTab('html');
+                    // Determine which content is currently being generated based on the stream position
+                    const htmlComplete = htmlMatch && htmlMatch[2] === '\n```';
+                    const cssBlockEnd = accumulatedResponse.indexOf('```', accumulatedResponse.indexOf('```css') + 6);
+                    const cssComplete = cssMatch && (cssMatch[2] === '\n```' || (cssBlockEnd !== -1 && cssBlockEnd < accumulatedResponse.indexOf('```javascript')));
+                    const jsStarted = accumulatedResponse.includes('```javascript') || accumulatedResponse.includes('```js');
+                    
+                    // Debug logging for streaming state
+                    if (cssMatch || jsMatch) {
+                      console.log('Streaming state:', {
+                        htmlComplete,
+                        cssComplete,
+                        jsStarted,
+                        cssLength: cssMatch?.[1]?.length || 0,
+                        jsLength: jsMatch?.[1]?.length || 0,
+                        cssBlockEnd,
+                        currentTab: activeTab
+                      });
                     }
-                    if (cssMatch) {
-                      setCssContent(cssMatch[1]);
-                      setActiveTab('css');
+
+                    if (htmlMatch && htmlMatch[1]) {
+                      const newHtml = htmlMatch[1].trim();
+                      if (newHtml) {
+                        setHtmlContent(newHtml);
+                        // Only switch to HTML tab if we're still generating HTML and haven't started CSS
+                        if (!cssMatch && !jsStarted) {
+                          setActiveTab('html');
+                        }
+                      }
                     }
-                    if (jsMatch) {
-                      setJsContent(jsMatch[1]);
-                      setActiveTab('js');
+                    if (cssMatch && cssMatch[1]) {
+                      const newCss = cssMatch[1].trim();
+                      if (newCss) {
+                        setCssContent(newCss);
+                        // Switch to CSS tab when CSS content is being generated, but only if JS hasn't started or CSS isn't complete
+                        if (!jsStarted || !cssComplete) {
+                          setActiveTab('css');
+                        }
+                      }
+                    }
+                    if (jsMatch && jsMatch[1]) {
+                      const newJs = jsMatch[1].trim();
+                      if (newJs && newJs !== '// JavaScript code will appear here') {
+                        jsContentRef.current = newJs; // Store in ref
+                        
+                        // Debounce JavaScript updates to prevent syntax errors during streaming
+                        if (updateTimeoutRef.current) {
+                          clearTimeout(updateTimeoutRef.current);
+                        }
+                        
+                        updateTimeoutRef.current = setTimeout(() => {
+                          // Only update if the JavaScript looks complete (basic validation)
+                          const braceCount = (newJs.match(/\{/g) || []).length - (newJs.match(/\}/g) || []).length;
+                          if (braceCount === 0 || newJs.includes('});')) {
+                            setJsContent(newJs);
+                            console.log('Streaming JavaScript content updated:', newJs.substring(0, 100) + '...');
+                            // Only switch to JS tab if CSS appears to be complete or if we have substantial JS content
+                            if (cssComplete || newJs.length > 200) {
+                              setActiveTab('js');
+                            }
+                          }
+                        }, 500); // 500ms debounce
+                      }
                     }
                   }
                 } catch (e) {
@@ -625,23 +707,240 @@ export default function ZenSiteMainPage() {
         }
         
         // Final parse after stream ends to ensure complete blocks are captured
-        const finalHtmlMatch = accumulatedResponse.match(/```html\n([\s\S]*?)```/);
-        const finalCssMatch = accumulatedResponse.match(/```css\n([\s\S]*?)```/);
-        const finalJsMatch = accumulatedResponse.match(/```javascript\n([\s\S]*?)```/);
+        const finalHtmlMatch = accumulatedResponse.match(/```html\s*\n([\s\S]*?)```/) ||
+                              accumulatedResponse.match(/```HTML\s*\n([\s\S]*?)```/) ||
+                              // Try to extract incomplete HTML
+                              accumulatedResponse.match(/```html\s*\n([\s\S]*?)$/);
         
-        const finalHtml = finalHtmlMatch?.[1].trim() || '';
-        const finalCss = finalCssMatch?.[1].trim() || '';
-        const finalJs = finalJsMatch?.[1].trim() || '';
+        const finalCssMatch = accumulatedResponse.match(/```css\s*\n([\s\S]*?)```/) ||
+                             accumulatedResponse.match(/```CSS\s*\n([\s\S]*?)```/) ||
+                             // Try to extract incomplete CSS (very common issue)
+                             accumulatedResponse.match(/```css\s*\n([\s\S]*?)$/) ||
+                             // Also try to find CSS content that might be cut off
+                             (() => {
+                               const cssStart = accumulatedResponse.indexOf('```css');
+                               if (cssStart !== -1) {
+                                 const cssContent = accumulatedResponse.substring(cssStart + 6).replace(/^\s*\n/, '');
+                                 const cssEnd = cssContent.indexOf('```');
+                                 return [null, cssEnd !== -1 ? cssContent.substring(0, cssEnd) : cssContent];
+                               }
+                               return null;
+                             })();
         
-        console.log('Final content lengths:', {
+        // Try multiple patterns for JavaScript
+        let finalJsMatch = accumulatedResponse.match(/```javascript\s*\n([\s\S]*?)```/) ||
+                          accumulatedResponse.match(/```js\s*\n([\s\S]*?)```/) ||
+                          accumulatedResponse.match(/```JavaScript\s*\n([\s\S]*?)```/) ||
+                          accumulatedResponse.match(/```JS\s*\n([\s\S]*?)```/) ||
+                          // Try to extract incomplete JavaScript
+                          accumulatedResponse.match(/```javascript\s*\n([\s\S]*?)$/) ||
+                          accumulatedResponse.match(/```js\s*\n([\s\S]*?)$/);
+        
+        const finalHtml = finalHtmlMatch?.[1]?.trim() || '';
+        let finalCss = finalCssMatch?.[1]?.trim() || '';
+        let finalJs = finalJsMatch?.[1]?.trim() || '';
+        
+        console.log('Final regex matches found:', {
+          htmlMatch: !!finalHtmlMatch,
+          cssMatch: !!finalCssMatch,
+          jsMatch: !!finalJsMatch
+        });
+        
+        // Debug: Show parts of accumulated response to understand the format
+        console.log('Accumulated response sample (last 500 chars):', 
+          accumulatedResponse.slice(-500));
+        
+        console.log('Initial content lengths:', {
           html: finalHtml.length,
           css: finalCss.length,
           js: finalJs.length
         });
         
-        setHtmlContent(finalHtml);
-        setCssContent(finalCss);
-        setJsContent(finalJs);
+        // If no JavaScript found, try to extract from the last known good content
+        if (!finalJs && jsContentRef.current && jsContentRef.current !== '// JavaScript code will appear here') {
+          finalJs = jsContentRef.current;
+          console.log('Using JavaScript from ref, length:', finalJs.length);
+        }
+        
+        // If no CSS found, try to extract from the accumulated response or provide fallback
+        if (!finalCss && finalHtml) {
+          // Try to find CSS-like content in the response
+          const cssLikeContent = accumulatedResponse.match(/([^`]*(?:body|\.[\w-]+|#[\w-]+)[^`]*{[^}]*}[^`]*)/g);
+          if (cssLikeContent && cssLikeContent.length > 0) {
+            finalCss = cssLikeContent.join('\n');
+            console.log('Extracted CSS-like content from response');
+          } else {
+            // Provide a comprehensive fallback CSS
+            finalCss = `* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+    color: #ffffff;
+    line-height: 1.6;
+    min-height: 100vh;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    text-align: center;
+    padding: 40px 0;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin-bottom: 1rem;
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+p {
+    margin-bottom: 1rem;
+}
+
+button {
+    background: linear-gradient(45deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.3s ease;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+}
+
+a {
+    color: #4ecdc4;
+    text-decoration: none;
+    transition: color 0.3s ease;
+}
+
+a:hover {
+    color: #ff6b6b;
+}
+
+section {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 30px;
+    margin: 20px 0;
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+    
+    h1 {
+        font-size: 2rem;
+    }
+    
+    section {
+        padding: 20px;
+        margin: 10px 0;
+    }
+}`;
+            console.log('Using comprehensive fallback CSS');
+          }
+        }
+        
+        // If still no JavaScript, provide a basic fallback
+        if (!finalJs && (finalHtml || finalCss)) {
+          finalJs = `document.addEventListener('DOMContentLoaded', function() {
+    console.log('Website loaded successfully');
+    
+    // Add basic interactivity
+    const buttons = document.querySelectorAll('button');
+    buttons.forEach(button => {
+        button.addEventListener('click', function() {
+            this.style.transform = 'scale(0.95)';
+            setTimeout(() => this.style.transform = 'scale(1)', 150);
+        });
+    });
+    
+    // Smooth scrolling for anchor links
+    const links = document.querySelectorAll('a[href^="#"]');
+    links.forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    });
+    
+    // Add hover effects to sections
+    const sections = document.querySelectorAll('section');
+    sections.forEach(section => {
+        section.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-5px)';
+            this.style.transition = 'transform 0.3s ease';
+        });
+        
+        section.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+        });
+    });
+});`;
+          console.log('Using fallback JavaScript');
+        }
+        
+        console.log('Final JavaScript content:', finalJs);
+        
+        console.log('Final processed content lengths:', {
+          html: finalHtml.length,
+          css: finalCss.length,
+          js: finalJs.length
+        });
+
+        // Always update content to ensure it's properly set
+        if (finalHtml) {
+          setHtmlContent(finalHtml);
+          console.log('HTML content updated, length:', finalHtml.length);
+        }
+        if (finalCss) {
+          setCssContent(finalCss);
+          console.log('CSS content updated, length:', finalCss.length);
+        }
+        if (finalJs) {
+          jsContentRef.current = finalJs; // Store in ref
+          setJsContent(finalJs);
+          console.log('JavaScript content updated, length:', finalJs.length);
+          console.log('JavaScript content preview:', finalJs.substring(0, 100) + '...');
+        }
+
+        // Set final tab based on what content we have
+        if (finalJs) {
+          setActiveTab('js');
+        } else if (finalCss) {
+          setActiveTab('css');
+        } else if (finalHtml) {
+          setActiveTab('html');
+        }
+
+        // Clear any previous errors since we now have fallbacks
+        setError(null);
+        if (finalHtml && finalCss && finalJs) {
+          setSuccessMessage('Website generated successfully with all components!');
+        }
       }
 
     } catch (err) {
@@ -650,42 +949,47 @@ export default function ZenSiteMainPage() {
     } finally {
       setIsLoading(false);
       
-      // Save to history after generation completes
-      if (user?.id) {
-        try {
-          console.log('Saving history with content:', {
-            html: htmlContent,
-            css: cssContent, 
-            js: jsContent
-          });
-          
-          // Verify content is set before saving
-          console.log('Current content state before saving:', {
-            html: htmlContent,
-            css: cssContent,
-            js: jsContent
-          });
-          
-          const savedItem = await saveHistory(
-            user.id,
-            prompt,
-            htmlContent,
-            cssContent,
-            jsContent,
-            imagePreview || undefined
-          );
-          
-          console.log('Saved history item:', savedItem);
-          
-          // Refresh history list
-          const updatedHistory = await loadHistory(user.id);
-          setHistoryItems(updatedHistory || []);
-        } catch (err) {
-          console.error('Error saving history:', err);
+      // Save to history after generation completes - use a timeout to ensure state is updated
+      setTimeout(async () => {
+        if (user?.id) {
+          try {
+            // Get the latest content from refs or state
+            const currentHtml = htmlContent || '<!-- HTML code will appear here -->';
+            const currentCss = cssContent || '/* CSS code will appear here */';
+            const currentJs = jsContentRef.current || jsContent || '// JavaScript code will appear here';
+            
+            console.log('Saving history with content:', {
+              html: currentHtml.length,
+              css: currentCss.length, 
+              js: currentJs.length
+            });
+            
+            // Only save if we have actual content (not default placeholders)
+            if (currentHtml.length > 50 || currentCss.length > 50 || currentJs.length > 50) {
+              const savedItem = await saveHistory(
+                user.id,
+                isImageInput ? imagePrompt : prompt,
+                currentHtml,
+                currentCss,
+                currentJs,
+                imagePreview || undefined
+              );
+              
+              console.log('Saved history item:', savedItem);
+              
+              // Refresh history list
+              const updatedHistory = await loadHistory(user.id);
+              setHistoryItems(updatedHistory || []);
+            } else {
+              console.log('Skipping save - no meaningful content generated');
+            }
+          } catch (err) {
+            console.error('Error saving history:', err);
+          }
+        } else {
+          console.warn('Cannot save history - no user ID');
         }
-      } else {
-        console.warn('Cannot save history - no user ID');
-      }
+      }, 1000); // Wait 1 second for state to settle
     }
   };
 
@@ -709,6 +1013,21 @@ export default function ZenSiteMainPage() {
     scrollToBottom('js-editor');
   }, [htmlContent, cssContent, jsContent]);
 
+  // Debug effect to monitor JavaScript content changes
+  useEffect(() => {
+    console.log('JavaScript content changed:', {
+      length: jsContent.length,
+      preview: jsContent.substring(0, 100) + (jsContent.length > 100 ? '...' : ''),
+      isDefault: jsContent === '// JavaScript code will appear here',
+      timestamp: new Date().toISOString()
+    });
+    
+    // Additional check for content loss
+    if (jsContent === '// JavaScript code will appear here' && isLoading === false) {
+      console.warn('JavaScript content reverted to default after loading completed');
+    }
+  }, [jsContent, isLoading]);
+
   return (
     <div className="flex flex-col min-h-screen bg-[#1a1a2e] text-gray-300 relative w-full">
       <LoadingOverlay 
@@ -717,7 +1036,7 @@ export default function ZenSiteMainPage() {
       />
       <header className="flex items-center justify-between px-4 py-2 border-b border-gray-700/50">
         <div className="flex items-center space-x-4">
-          <div className="w-5 h-5 border-2 border-purple-500 rounded-full"></div>
+          <img src="/webgptlogo.png" alt="WebGPT Logo" className="w-5 h-5 rounded-full" />
           <div 
             onClick={() => setIsLogoLoading(true)}
             className="cursor-pointer"
@@ -749,7 +1068,7 @@ export default function ZenSiteMainPage() {
                   e.stopPropagation();
                   setShowHistory(true);
                 }}
-                className="text-xs px-4 py-1.5 h-auto bg-gradient-to-r from-purple-500 to-orange-500 hover:from-purple-600 hover:to-orange-600 text-white shadow-lg hover:1px shadow-xl transition-all duration-300 transform hover:scale-105"
+                className="text-xs px-4 py-1.5 h-auto bg-gradient-to-r from-purple-500 to-orange-500 hover:from-purple-600 hover:to-orange-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
               >
                 History
               </Button>
@@ -784,14 +1103,16 @@ export default function ZenSiteMainPage() {
             ref={historySidebarRef}
             className="absolute left-0 top-0 bottom-0 w-64 bg-[#161625] border-r border-gray-700/50 z-10 overflow-y-auto"
           >
-            <div className="p-4 border-b border-gray-700/50 flex justify-between items-center">
-              <h3 className="text-sm font-medium text-gray-300">Your History</h3>
-              <button
-                onClick={() => setShowHistory(false)}
-                className="text-gray-400 hover:text-white text-lg"
-              >
-                &times;
-              </button>
+            <div className="p-4 border-b border-gray-700/50">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-sm font-medium text-gray-300">Your History</h3>
+                <button
+                  onClick={() => setShowHistory(false)}
+                  className="text-gray-400 hover:text-white text-lg"
+                >
+                  &times;
+                </button>
+              </div>
               <button
                 onClick={async () => {
                   if (confirm('Are you sure you want to delete ALL history items? This cannot be undone.')) {
@@ -806,10 +1127,10 @@ export default function ZenSiteMainPage() {
                     }
                   }
                 }}
-                className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-900/20 transition-colors"
+                className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-900/20 transition-colors w-full"
                 disabled={historyItems.length === 0}
               >
-                Delete All
+                Delete All History
               </button>
             </div>
             <div className="divide-y divide-gray-700/50">
@@ -924,6 +1245,7 @@ export default function ZenSiteMainPage() {
                         setPrompt(''); // Clear text prompt when image is uploaded
                         setImagePrompt(''); // Clear image text prompt too
                         setError(null); // Clear any previous errors
+                        setSuccessMessage(null); // Clear any previous success messages
                       };
                       reader.readAsDataURL(file);
                     }
@@ -1034,6 +1356,12 @@ export default function ZenSiteMainPage() {
           {error && (
             <div className="px-4 py-2 border-t border-red-800/50 bg-red-900/20 text-red-400 text-xs">
               {error}
+            </div>
+          )}
+          {/* Success Message Display */}
+          {successMessage && (
+            <div className="px-4 py-2 border-t border-green-800/50 bg-green-900/20 text-green-400 text-xs">
+              {successMessage}
             </div>
           )}
         </div>

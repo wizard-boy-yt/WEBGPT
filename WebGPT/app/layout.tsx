@@ -12,7 +12,12 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "WebGpt - Build websites with AI",
   description: "Create stunning, functional websites with AI in minutes. No coding required.",
-    generator: ''
+  generator: '',
+  icons: {
+    icon: '/webgptlogo.png',
+    shortcut: '/webgptlogo.png',
+    apple: '/webgptlogo.png',
+  },
 }
 
 export default async function RootLayout({

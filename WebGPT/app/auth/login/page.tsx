@@ -36,7 +36,10 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
       <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-lg shadow-lg">
-        <h1 className="text-3xl font-bold text-center text-purple-500">LOGIN</h1>
+        <div className="flex flex-col items-center space-y-4">
+          <img src="/webgptlogo.png" alt="WebGPT Logo" className="w-16 h-16 rounded-full" />
+          <h1 className="text-3xl font-bold text-center text-purple-500">LOGIN</h1>
+        </div>
         
         {error && (
           <div className="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">

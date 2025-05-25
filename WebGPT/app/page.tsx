@@ -28,7 +28,7 @@ export default function Home() {
       <header className="border-b border-gray-800">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-full border-2 border-purple-500"></div>
+            <img src="/webgptlogo.png" alt="WebGPT Logo" className="w-10 h-10 rounded-full" />
             <span className="text-xl font-bold tracking-wider">WEBGPT</span>
           </div>
 
